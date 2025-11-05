@@ -1,0 +1,58 @@
+@echo off
+setlocal enabledelayedexpansion
+
+:: ===============================
+:: Send Adapter Names + IPs to Webex Space (Formatted)
+:: ===============================
+:: you will need to create the bot and add it to a space and get "YOUR_BOT_ACCESS_TOKEN" and "YOUR_WEBEX_ROOM_ID" and fill them below.
+
+:: CONFIGURATION
+set "WEBEX_BOT_TOKEN=YOUR_BOT_ACCESS_TOKEN"
+set "WEBEX_ROOM_ID=YOUR_WEBEX_ROOM_ID"
+
+:: Clean temp file
+if exist ips.txt del ips.txt
+
+:: Gather all adapter names and IPv4 addresses
+set "adapter="
+for /f "usebackq tokens=*" %%A in (`ipconfig`) do (
+    set "line=%%A"
+    if not "!line!"=="" (
+        echo !line! | findstr /i "adapter" >nul
+        if !errorlevel! == 0 (
+            :: New adapter section
+            set "adapter=!line:*adapter =!"
+        ) else (
+            echo !line! | findstr /c:"IPv4 Address" >nul
+            if !errorlevel! == 0 (
+                for /f "tokens=2 delims=:" %%B in ("!line!") do (
+                    set "ip=%%B"
+                    set "ip=!ip: =!"
+                    echo !adapter!: !ip!>>ips.txt
+                )
+            )
+        )
+    )
+)
+
+:: Build multi-line message for JSON
+set "MESSAGE=Device IPs:\n"
+for /f "usebackq delims=" %%I in ("ips.txt") do (
+    set "MESSAGE=!MESSAGE!%%I\n"
+)
+
+:: Escape quotes for JSON
+set "MESSAGE=%MESSAGE:"=\"%"
+
+:: Send to Webex using curl
+curl -X POST "https://webexapis.com/v1/messages" ^
+  -H "Authorization: Bearer %WEBEX_BOT_TOKEN%" ^
+  -H "Content-Type: application/json" ^
+  -d "{\"roomId\": \"%WEBEX_ROOM_ID%\", \"markdown\": \"%MESSAGE%\"}"
+
+:: Cleanup
+del ips.txt
+
+echo.
+echo ✅ Formatted IP addresses sent to Webex space successfully.
+pause
